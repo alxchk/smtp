@@ -921,6 +921,31 @@ func TestAuthLogin(t *testing.T) {
 		So(handlerCalled, ShouldBeTrue)
 	})
 
+	Convey("AUTH LOGIN with login should call ValidateAuthenticationHandler", t, func() {
+		proto := NewProtocol()
+		handlerCalled := false
+		proto.ValidateAuthenticationHandler = func(mechanism string, args ...string) (*Reply, bool) {
+			handlerCalled = true
+			So(mechanism, ShouldEqual, "LOGIN")
+			So(len(args), ShouldEqual, 2)
+			So(args[0], ShouldEqual, "username!")
+			So(args[1], ShouldEqual, "password!")
+			return nil, true
+		}
+		proto.Start()
+		proto.Command(ParseCommand("EHLO localhost"))
+		reply := proto.Command(ParseCommand("AUTH login username!"))
+		So(reply, ShouldNotBeNil)
+		So(reply.Status, ShouldEqual, 334)
+		So(reply.Lines(), ShouldResemble, []string{"334 UGFzc3dvcmQ6\r\n"})
+
+		_, reply = proto.Parse("password!\r\n")
+		So(reply, ShouldNotBeNil)
+		So(reply.Status, ShouldEqual, 235)
+		So(reply.Lines(), ShouldResemble, []string{"235 Authentication successful\r\n"})
+		So(handlerCalled, ShouldBeTrue)
+	})
+
 	Convey("AUTH LOGIN ValidateAuthenticationHandler errors should be returned", t, func() {
 		proto := NewProtocol()
 		handlerCalled := false
@@ -930,7 +955,7 @@ func TestAuthLogin(t *testing.T) {
 		}
 		proto.Start()
 		proto.Command(ParseCommand("EHLO localhost"))
-		reply := proto.Command(ParseCommand("AUTH LOGIN"))
+		reply := proto.Command(ParseCommand("AUTH LOGin"))
 		So(reply, ShouldNotBeNil)
 		So(reply.Status, ShouldEqual, 334)
 		So(reply.Lines(), ShouldResemble, []string{"334 VXNlcm5hbWU6\r\n"})

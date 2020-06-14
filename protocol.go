@@ -303,13 +303,38 @@ func (proto *Protocol) Command(command *Command) (reply *Reply) {
 		proto.logf("In MAIL state")
 		switch command.verb {
 		case "AUTH":
-			proto.logf("Got AUTH command, staying in MAIL state")
+			authArgs := strings.SplitN(command.args, " ", 2)
+
+			authMethod := ""
+			authMethodArgs := make([]string, 0)
+
+			if len(authArgs) > 0 {
+				authMethod = strings.Trim(strings.ToUpper(authArgs[0]), " ")
+				if len(authArgs) > 1 {
+					authMethodArgsTmp := strings.Split(authArgs[1], " ")
+					for _, arg := range authMethodArgsTmp {
+						tmpArg := strings.Trim(arg, " ")
+						if tmpArg == "" {
+							continue
+						}
+
+						authMethodArgs = append(authMethodArgs, tmpArg)
+					}
+				}
+			}
+
+			proto.logf(
+				"Got AUTH command (Method: %s Args: %s), staying in MAIL state",
+				authMethod, authMethodArgs,
+			)
+
 			switch {
-			case strings.HasPrefix(command.args, "PLAIN "):
-				proto.logf("Got PLAIN authentication: %s", strings.TrimPrefix(command.args, "PLAIN "))
+			case "PLAIN" == authMethod && len(authMethodArgs) > 0:
+				proto.logf("Got PLAIN authentication: %s", authMethodArgs)
 				if proto.ValidateAuthenticationHandler != nil {
-					val, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(command.args, "PLAIN "))
-					bits := strings.Split(string(val), string(rune(0)))
+					plainCreds, _ := base64.StdEncoding.DecodeString(authMethodArgs[0])
+
+					bits := strings.Split(string(plainCreds), string(rune(0)))
 
 					if len(bits) < 3 {
 						return ReplyError(errors.New("Badly formed parameter"))
@@ -322,22 +347,34 @@ func (proto *Protocol) Command(command *Command) (reply *Reply) {
 					}
 				}
 				return ReplyAuthOk()
-			case "LOGIN" == command.args:
-				proto.logf("Got LOGIN authentication, switching to AUTH state")
-				proto.State = AUTHLOGIN
-				return ReplyAuthResponse("VXNlcm5hbWU6")
-			case "PLAIN" == command.args:
+			case "LOGIN" == authMethod:
+				if len(authMethodArgs) == 0 {
+					proto.logf("Got LOGIN authentication, switching to AUTH state")
+					proto.State = AUTHLOGIN
+					return ReplyAuthResponse("VXNlcm5hbWU6")
+				} else {
+					proto.logf("Got LOGIN authentication, switching to AUTH (PASSWORD) state")
+					proto.State = AUTHLOGIN2
+					command.orig = authMethodArgs[0]
+					return ReplyAuthResponse("UGFzc3dvcmQ6")
+				}
+			case "PLAIN" == authMethod:
 				proto.logf("Got PLAIN authentication (no args), switching to AUTH2 state")
 				proto.State = AUTHPLAIN
 				return ReplyAuthResponse("")
-			case "CRAM-MD5" == command.args:
+			case "CRAM-MD5" == authMethod:
 				proto.logf("Got CRAM-MD5 authentication, switching to AUTH state")
 				proto.State = AUTHCRAMMD5
 				return ReplyAuthResponse("PDQxOTI5NDIzNDEuMTI4Mjg0NzJAc291cmNlZm91ci5hbmRyZXcuY211LmVkdT4=")
-			case strings.HasPrefix(command.args, "EXTERNAL "):
-				proto.logf("Got EXTERNAL authentication: %s", strings.TrimPrefix(command.args, "EXTERNAL "))
+			case "EXTERNAL" == authMethod:
+				proto.logf("Got EXTERNAL authentication: %s", authMethodArgs)
+				externalArgs := ""
+				if len(authArgs) > 1 {
+					externalArgs = authArgs[1]
+				}
+
 				if proto.ValidateAuthenticationHandler != nil {
-					if reply, ok := proto.ValidateAuthenticationHandler("EXTERNAL", strings.TrimPrefix(command.args, "EXTERNAL ")); !ok {
+					if reply, ok := proto.ValidateAuthenticationHandler("EXTERNAL", externalArgs); !ok {
 						return reply
 					}
 				}
