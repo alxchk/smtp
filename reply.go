@@ -39,7 +39,7 @@ func ReplyIdent(ident string) *Reply { return &Reply{220, []string{ident}, nil} 
 
 // ReplyReadyToStartTLS creates a 220 ready to start TLS reply
 func ReplyReadyToStartTLS(callback func()) *Reply {
-	return &Reply{220, []string{"Ready to start TLS"}, callback}
+	return &Reply{220, []string{"2.0.0 Ready to start TLS"}, callback}
 }
 
 // ReplyBye creates a 221 Bye reply
