@@ -1,4 +1,4 @@
-module github.com/kernle32dll/smtp
+module github.com/alxchk/smtp
 
 go 1.13
 
